@@ -122,6 +122,71 @@ ROADMAP_TABS = [
     ("days_61_90", "Days 61-90"),
 ]
 
+# Official courses and learning pages for the hub.
+COURSES = [
+    {
+        "id": "google-ux-design",
+        "title": "Google UX Design Professional Certificate",
+        "category": "UI/UX",
+        "level": "Beginner",
+        "provider": "Google on Coursera",
+        "duration": "Self-paced",
+        "description": "Build UX foundations and practise research, wireframing, prototyping, and usability testing.",
+        "link": "https://www.coursera.org/professional-certificates/google-ux-design",
+    },
+    {
+        "id": "ixdf-design-thinking",
+        "title": "Design Thinking: The Beginner's Guide",
+        "category": "Product Design",
+        "level": "Beginner",
+        "provider": "Interaction Design Foundation",
+        "duration": "Self-paced",
+        "description": "Learn a human-centred process for understanding problems and exploring design solutions.",
+        "link": "https://www.interaction-design.org/courses/design-thinking-the-beginner-s-guide",
+    },
+    {
+        "id": "figma-get-started",
+        "title": "Get started with Figma",
+        "category": "Figma",
+        "level": "Beginner",
+        "provider": "Figma",
+        "duration": "Self-paced tutorials",
+        "description": "Learn the Figma interface and practise creating, sharing, and collaborating on designs.",
+        "link": "https://help.figma.com/hc/en-us/categories/360002051613-Get-started",
+    },
+    {
+        "id": "nng-ux-research",
+        "title": "UX Research Courses",
+        "category": "UX Research",
+        "level": "Intermediate",
+        "provider": "Nielsen Norman Group",
+        "duration": "Course schedule varies",
+        "description": "Explore research methods for planning studies, gathering user feedback, and turning findings into design decisions.",
+        "link": "https://www.nngroup.com/courses/",
+    },
+    {
+        "id": "nng-ai-design",
+        "title": "AI for Design Workflows",
+        "category": "AI Design",
+        "level": "Intermediate",
+        "provider": "Nielsen Norman Group",
+        "duration": "Course schedule varies",
+        "description": "Learn how to use AI in design work, from ideation and prototyping to reviewing AI-generated results.",
+        "link": "https://www.nngroup.com/courses/ai-for-design/",
+    },
+    {
+        "id": "uva-product-management",
+        "title": "Digital Product Management: Modern Fundamentals",
+        "category": "Product Management",
+        "level": "Beginner",
+        "provider": "University of Virginia on Coursera",
+        "duration": "Self-paced",
+        "description": "Learn core digital product management ideas and how to apply them through practical examples.",
+        "link": "https://www.coursera.org/learn/uva-darden-digital-product-management",
+    },
+]
+COURSE_STATUSES = ["Not Started", "In Progress", "Completed"]
+
 # Send one Gemini request with retries for temporary service problems.
 def call_gemini(contents, config):
     client = genai.Client(
@@ -211,6 +276,88 @@ def plan_to_markdown(plan, name):
         lines += [f"- [ ] **Mini project:** {block['mini_project']}", ""]
     lines += ["---", "_AI suggestions, not guarantees._"]
     return "\n".join(lines)
+
+# Show course filters, details, learning links, and saved progress.
+def render_courses():
+    st.subheader("📚 Courses & Learning Hub")
+    st.write("Explore learning options and track your progress as you build new skills.")
+
+    # Search by course name, provider, category, or skill level.
+    search_query = st.text_input(
+        "Search courses",
+        placeholder="Search by course, provider, or skill...",
+    ).strip().casefold()
+    category_options = ["All categories"] + sorted({course["category"] for course in COURSES})
+    level_options = ["All levels"] + sorted({course["level"] for course in COURSES})
+    category_column, level_column = st.columns(2)
+    selected_category = category_column.selectbox("Filter by category", category_options)
+    selected_level = level_column.selectbox("Filter by skill level", level_options)
+
+    course_progress = st.session_state.setdefault("course_progress", {})
+    progress_values = {"Not Started": 0.0, "In Progress": 0.5, "Completed": 1.0}
+    # Read the latest selections before calculating the overall progress bar.
+    for course in COURSES:
+        status_key = f"course_status_{course['id']}"
+        if status_key in st.session_state:
+            course_progress[course["id"]] = st.session_state[status_key]
+    matching_courses = [
+        course
+        for course in COURSES
+        if (selected_category == "All categories" or course["category"] == selected_category)
+        and (selected_level == "All levels" or course["level"] == selected_level)
+        and (
+            not search_query
+            or search_query
+            in " ".join(
+                [
+                    course["title"],
+                    course["provider"],
+                    course["category"],
+                    course["level"],
+                    course["description"],
+                ]
+            ).casefold()
+        )
+    ]
+    completed_count = sum(
+        course_progress.get(course["id"], "Not Started") == "Completed"
+        for course in COURSES
+    )
+    st.caption(f"Completed courses: {completed_count} of {len(COURSES)}")
+    # Show overall learning progress, counting an in-progress course halfway.
+    overall_progress = sum(
+        progress_values[course_progress.get(course["id"], "Not Started")]
+        for course in COURSES
+    ) / len(COURSES)
+    st.progress(overall_progress, text=f"Overall learning progress: {overall_progress:.0%}")
+
+    if not matching_courses:
+        st.info("No courses match these filters. Try another category or skill level.")
+    for course in matching_courses:
+        with st.container(border=True):
+            title_column, progress_column = st.columns([3, 2])
+            title_column.markdown(f"#### {course['title']}")
+            title_column.caption(
+                f"{course['provider']} · {course['category']} · {course['level']}"
+            )
+            status = progress_column.selectbox(
+                "Learning progress",
+                COURSE_STATUSES,
+                index=COURSE_STATUSES.index(
+                    course_progress.get(course["id"], "Not Started")
+                ),
+                key=f"course_status_{course['id']}",
+            )
+            course_progress[course["id"]] = status
+            st.progress(progress_values[status], text=status)
+            with st.expander("Course details"):
+                st.write(course["description"])
+                st.caption(f"Format: {course['duration']}")
+                st.link_button(
+                    "Open official learning link",
+                    course["link"],
+                    use_container_width=True,
+                )
 
 # Page header
 st.markdown(
@@ -348,16 +495,22 @@ if "plan" in st.session_state:
     for gap in gaps:
         chart_box.markdown(f"- **{gap['skill']}:** {gap['free_resource']}")
 
-    st.subheader("🗓️ Your 90-day roadmap")
-    for tab, (key, label) in zip(
-        st.tabs([label for _, label in ROADMAP_TABS]),
-        ROADMAP_TABS,
-    ):
-        with tab:
-            block = plan["roadmap"][key]
-            for index, task in enumerate(block["tasks"]):
-                st.checkbox(task, key=f"task_{plan_id}_{key}_{index}")
-            st.info(f"🛠️ **Mini project:** {block['mini_project']}")
+    # Keep the learning hub beside the existing roadmap.
+    career_tab, courses_tab = st.tabs(["Career Roadmap", "Courses"])
+    with career_tab:
+        st.subheader("🗓️ Your 90-day roadmap")
+        for tab, (key, label) in zip(
+            st.tabs([label for _, label in ROADMAP_TABS]),
+            ROADMAP_TABS,
+        ):
+            with tab:
+                block = plan["roadmap"][key]
+                for index, task in enumerate(block["tasks"]):
+                    st.checkbox(task, key=f"task_{plan_id}_{key}_{index}")
+                st.info(f"🛠️ **Mini project:** {block['mini_project']}")
+
+    with courses_tab:
+        render_courses()
 
     st.download_button(
         "⬇️ Download my plan",
@@ -386,6 +539,12 @@ if "plan" in st.session_state:
     for who, text in history:
         with st.chat_message("user" if who == "You" else "assistant"):
             st.markdown(text)
+else:
+    career_tab, courses_tab = st.tabs(["Career Roadmap", "Courses"])
+    with career_tab:
+        st.info("Your career roadmap will appear here after you create a plan above.")
+    with courses_tab:
+        render_courses()
 
 # Footer
 st.divider()
